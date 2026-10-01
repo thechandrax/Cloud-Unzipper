@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +44,7 @@ fun UnzipScreen() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("cloud_unzip_prefs", Context.MODE_PRIVATE) }
     val coroutineScope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
 
     // 👤 Google Account State
     var connectedAccount by remember {
@@ -371,10 +373,30 @@ fun UnzipScreen() {
                                 serverUrl = it.trim()
                                 persistSettings()
                             },
-                            label = { Text("Cloud Server URL", fontFamily = CambriaFont, fontSize = 12.sp) },
+                            label = { Text("Cloud Server URL (trycloudflare)", fontFamily = CambriaFont, fontSize = 12.sp) },
+                            placeholder = { Text("https://xxxx.trycloudflare.com", fontFamily = CambriaFont, fontSize = 12.sp) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            },
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    val clip = clipboardManager.getText()?.text?.trim() ?: ""
+                                    if (clip.isNotBlank()) {
+                                        serverUrl = clip
+                                        persistSettings()
+                                        checkServerHealth()
+                                    }
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentPaste,
+                                        contentDescription = "Paste from Clipboard",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp)
                         )
 
                         Row(

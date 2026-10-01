@@ -2,39 +2,30 @@
 
 Extract gigabyte-sized archives (`.zip`, `.rar`, `.7z`) inside Google Drive with **0 MB phone storage** and **0 MB mobile data used**!
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/thechandrax/Drive-Unzipper/blob/main/Drive_Cloud_Unzipper.ipynb)
+[![Download APK](https://img.shields.io/badge/Download-Android%20APK%20v1.2.0-brightgreen?logo=android)](https://github.com/thechandrax/Drive-Unzipper/releases/latest)
+
+---
+
+## 📱 Daily Usage: 3 Easy Steps
+
+1. **Open Colab on your Phone or PC** (tap the **Open In Colab** badge above).
+2. **Tap the Play (▶️) button**:
+   - Google Drive will connect.
+   - It will display your secure temporary link:
+     ```
+     👉 https://xxxx.trycloudflare.com 👈
+     ```
+3. **Open the Cloud Unzipper Android App**:
+   - Tap the **Paste (📋)** button in the URL field.
+   - Tap **START CLOUD EXTRACTION**!
+   - All files will be extracted directly into your Google Drive in seconds.
+
 ---
 
 ## 📦 What is Inside This Repository?
 
-- **`android-app/`**: Full native Android App written in Kotlin & Jetpack Compose (Material 3).
-- **`cloud-backend/`**: FastAPI cloud worker with high-speed multi-core `7z` extraction engine and live SSE progress streaming.
-- **`.github/workflows/build-apk.yml`**: Automatic cloud builder that creates the `.apk` on GitHub without needing Android Studio installed.
-- **`Drive_Cloud_Unzipper.ipynb`**: Interactive Colab notebook edition with mobile forms and Gradio web interface.
-
----
-
-## ⚡ How to Get the Android APK in 3 Steps (Zero Coding)
-
-1. **Upload or Push this folder to GitHub**:
-   - Create a free new repository on [GitHub](https://github.com/new).
-   - Push or upload this project into the repository.
-
-2. **Wait 2 minutes for GitHub to build your APK**:
-   - Go to the **Actions** tab on your GitHub repository.
-   - You will see the **"Build Android APK"** workflow running.
-   - When it turns green with a checkmark (✅), click on the completed run.
-
-3. **Download & Install on your Phone**:
-   - Under the **Artifacts** section at the bottom, download **`CloudUnzipper-Debug-APK`**.
-   - Open the `.apk` on your Android phone and tap **Install**!
-
----
-
-## ☁️ How to Run the Free Cloud Worker
-
-Deploy the `/cloud-backend` to any free Python container host (Render, Railway, or Hugging Face Spaces):
-1. Create a free account on [Render.com](https://render.com).
-2. Connect your GitHub repository and select the `cloud-backend` directory.
-3. Render will deploy it automatically and provide a URL like:
-   `https://my-unzipper.onrender.com`
-4. In your Android app, your extraction requests will route through this high-speed cloud worker.
+- **`android-app/`**: Native Android app written in Kotlin & Jetpack Compose (Material 3, Cambria font, 1-tap clipboard paste, honest real-time progress).
+- **`Drive_Cloud_Unzipper.ipynb`**: 1-Click Google Colab cloud engine with 7-Zip acceleration and Cloudflare tunnel.
+- **`cloud-backend/`**: FastAPI cloud backend with multi-engine extraction (7-Zip / BSDTar).
+- **`.github/workflows/build-apk.yml`**: GitHub Actions automated APK compilation.
