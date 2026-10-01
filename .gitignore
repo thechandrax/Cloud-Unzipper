@@ -1,0 +1,19 @@
+# Gradle
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+ENV/
