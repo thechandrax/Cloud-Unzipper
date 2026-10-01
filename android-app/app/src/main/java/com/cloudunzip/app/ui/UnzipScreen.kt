@@ -1,8 +1,8 @@
 package com.cloudunzip.app.ui
 
+import android.content.Context
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,12 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -41,37 +41,90 @@ val CambriaFont = FontFamily.Serif
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UnzipScreen() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("cloud_unzip_prefs", Context.MODE_PRIVATE) }
     val coroutineScope = rememberCoroutineScope()
 
     // 👤 Google Account State
-    var connectedAccount by remember { mutableStateOf("thechandrachur@gmail.com") }
+    var connectedAccount by remember {
+        mutableStateOf(prefs.getString("connected_account", "thekristopherpaul@gmail.com") ?: "thekristopherpaul@gmail.com")
+    }
     var showAccountDialog by remember { mutableStateOf(false) }
     var tempAccountInput by remember { mutableStateOf("") }
 
-    // 📁 Folder & File Selection State
-    var sourceFolder by remember { mutableStateOf("GDFlix") }
-    var destinationFolder by remember { mutableStateOf("MOVIES & WEB SERIES INFO") }
-    var exactFileName by remember { mutableStateOf("") }
-    var deleteAfter by remember { mutableStateOf(false) }
-    var password by remember { mutableStateOf("") }
+    // 🌐 Cloud Worker URL State (Saved in phone memory)
+    var serverUrl by remember {
+        mutableStateOf(prefs.getString("server_url", "") ?: "")
+    }
+    var isCheckingHealth by remember { mutableStateOf(false) }
+    var isServerOnline by remember { mutableStateOf(false) }
+    var serverHealthText by remember { mutableStateOf("Not tested yet") }
 
-    // ⚙️ Backend & Mode Settings
-    var useDirectCloudMode by remember { mutableStateOf(true) } // Default to direct cloud runner so it works out of the box!
-    var serverUrl by remember { mutableStateOf("https://drive-unzip-worker.onrender.com") }
-    var showServerSettings by remember { mutableStateOf(false) }
-    var connectionStatus by remember { mutableStateOf("⚡ Direct Cloud Runner (No Server Required)") }
+    // 📁 Folder & File Selection State
+    var sourceFolder by remember {
+        mutableStateOf(prefs.getString("source_folder", "GDFlix") ?: "GDFlix")
+    }
+    var destinationFolder by remember {
+        mutableStateOf(prefs.getString("dest_folder", "MOVIES & WEB SERIES INFO") ?: "MOVIES & WEB SERIES INFO")
+    }
+    var exactFileName by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
 
     // 🚀 Execution State
     var isExtracting by remember { mutableStateOf(false) }
     var progressPercent by remember { mutableIntStateOf(0) }
-    var currentStatus by remember { mutableStateOf("Ready to extract") }
+    var currentStatus by remember { mutableStateOf("Idle - Ready to extract") }
     val logMessages = remember { mutableStateListOf<String>() }
 
-    // Initialize with a welcome log
+    // Save preferences helper
+    fun persistSettings() {
+        prefs.edit()
+            .putString("connected_account", connectedAccount)
+            .putString("server_url", serverUrl)
+            .putString("source_folder", sourceFolder)
+            .putString("dest_folder", destinationFolder)
+            .apply()
+    }
+
+    // Function to test cloud server health
+    fun checkServerHealth() {
+        if (serverUrl.isBlank()) {
+            isServerOnline = false
+            serverHealthText = "Please enter your Colab Cloudflare URL"
+            return
+        }
+        isCheckingHealth = true
+        coroutineScope.launch(Dispatchers.IO) {
+            val client = OkHttpClient.Builder().connectTimeout(5, TimeUnit.SECONDS).build()
+            try {
+                val req = Request.Builder().url(serverUrl.trimEnd('/') + "/").build()
+                val resp = client.newCall(req).execute()
+                val success = resp.isSuccessful
+                withContext(Dispatchers.Main) {
+                    isServerOnline = success
+                    serverHealthText = if (success) "🟢 Cloud Worker Online & Connected to Google Drive!" else "🔴 Server responded with error ${resp.code}"
+                    isCheckingHealth = false
+                    persistSettings()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    isServerOnline = false
+                    serverHealthText = "🔴 Cannot connect: ${e.localizedMessage ?: "Offline"}"
+                    isCheckingHealth = false
+                }
+            }
+        }
+    }
+
+    // Auto-check connection on start if URL exists
     LaunchedEffect(Unit) {
+        if (serverUrl.isNotBlank()) {
+            checkServerHealth()
+        }
         if (logMessages.isEmpty()) {
-            logMessages.add("⚡ Engine initialized for account: $connectedAccount")
-            logMessages.add("📁 Source target: MyDrive/$sourceFolder")
+            logMessages.add("📱 Cloud Unzipper initialized.")
+            logMessages.add("👤 Google Account: $connectedAccount")
+            logMessages.add("📂 Target: MyDrive/$sourceFolder -> MyDrive/$destinationFolder")
         }
     }
 
@@ -89,7 +142,7 @@ fun UnzipScreen() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Enter any Google Account that has access to your Google Drive files (no need to be logged into your phone!):",
+                        text = "Active account for Google Drive storage:",
                         fontFamily = CambriaFont,
                         fontSize = 14.sp
                     )
@@ -109,12 +162,12 @@ fun UnzipScreen() {
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SuggestionChip(
-                            onClick = { tempAccountInput = "thechandrachur@gmail.com" },
-                            label = { Text("Default", fontFamily = CambriaFont) }
+                            onClick = { tempAccountInput = "thekristopherpaul@gmail.com" },
+                            label = { Text("thekristopherpaul", fontFamily = CambriaFont) }
                         )
                         SuggestionChip(
-                            onClick = { tempAccountInput = "movies.drive@gmail.com" },
-                            label = { Text("Movies Drive", fontFamily = CambriaFont) }
+                            onClick = { tempAccountInput = "thechandrachur@gmail.com" },
+                            label = { Text("thechandrax", fontFamily = CambriaFont) }
                         )
                     }
                 }
@@ -124,12 +177,13 @@ fun UnzipScreen() {
                     onClick = {
                         if (tempAccountInput.isNotBlank()) {
                             connectedAccount = tempAccountInput.trim()
-                            logMessages.add("🔄 Switched active Google Drive account to: $connectedAccount")
+                            persistSettings()
+                            logMessages.add("🔄 Switched active account to: $connectedAccount")
                         }
                         showAccountDialog = false
                     }
                 ) {
-                    Text("Save & Connect", fontFamily = CambriaFont)
+                    Text("Save", fontFamily = CambriaFont)
                 }
             },
             dismissButton = {
@@ -197,7 +251,7 @@ fun UnzipScreen() {
                         }
                     }
 
-                    // Account Icon Button
+                    // Account Button
                     IconButton(
                         onClick = {
                             tempAccountInput = connectedAccount
@@ -253,7 +307,7 @@ fun UnzipScreen() {
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "Connected Google Drive",
+                                    text = "Google Drive Account",
                                     fontFamily = CambriaFont,
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
@@ -274,6 +328,79 @@ fun UnzipScreen() {
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
+                    }
+                }
+            }
+
+            // 🌐 Cloud Worker Connection Setup Card
+            item {
+                OutlinedCard(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = if (isServerOnline) Color(0xFFF1F8E9) else MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "⚡ Cloud Engine Connection",
+                                fontFamily = CambriaFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isServerOnline) Color(0xFF4CAF50) else Color(0xFFFF5252))
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = serverUrl,
+                            onValueChange = {
+                                serverUrl = it.trim()
+                                persistSettings()
+                            },
+                            label = { Text("Colab Cloudflare URL (https://...trycloudflare.com)", fontFamily = CambriaFont, fontSize = 12.sp) },
+                            placeholder = { Text("https://example.trycloudflare.com", fontFamily = CambriaFont, fontSize = 12.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = serverHealthText,
+                                fontFamily = CambriaFont,
+                                fontSize = 11.sp,
+                                color = if (isServerOnline) Color(0xFF2E7D32) else Color(0xFFC62828),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = { checkServerHealth() },
+                                enabled = !isCheckingHealth,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                if (isCheckingHealth) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White)
+                                } else {
+                                    Text("Test Link", fontFamily = CambriaFont, fontSize = 12.sp)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -305,7 +432,10 @@ fun UnzipScreen() {
                             )
                             OutlinedTextField(
                                 value = sourceFolder,
-                                onValueChange = { sourceFolder = it },
+                                onValueChange = {
+                                    sourceFolder = it
+                                    persistSettings()
+                                },
                                 leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
@@ -317,7 +447,10 @@ fun UnzipScreen() {
                                 items(quickSources) { folder ->
                                     FilterChip(
                                         selected = sourceFolder == folder,
-                                        onClick = { sourceFolder = folder },
+                                        onClick = {
+                                            sourceFolder = folder
+                                            persistSettings()
+                                        },
                                         label = { Text(folder, fontFamily = CambriaFont, fontSize = 12.sp) }
                                     )
                                 }
@@ -336,7 +469,10 @@ fun UnzipScreen() {
                             )
                             OutlinedTextField(
                                 value = destinationFolder,
-                                onValueChange = { destinationFolder = it },
+                                onValueChange = {
+                                    destinationFolder = it
+                                    persistSettings()
+                                },
                                 leadingIcon = { Icon(Icons.Default.FolderSpecial, contentDescription = null) },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
@@ -348,7 +484,10 @@ fun UnzipScreen() {
                                 items(quickDests) { folder ->
                                     FilterChip(
                                         selected = destinationFolder == folder,
-                                        onClick = { destinationFolder = folder },
+                                        onClick = {
+                                            destinationFolder = folder
+                                            persistSettings()
+                                        },
                                         label = { Text(folder, fontFamily = CambriaFont, fontSize = 12.sp) }
                                     )
                                 }
@@ -366,43 +505,29 @@ fun UnzipScreen() {
                             shape = RoundedCornerShape(10.dp)
                         )
 
-                        // Checkbox
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Checkbox(
-                                checked = deleteAfter,
-                                onCheckedChange = { deleteAfter = it }
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Delete original archive after extraction (frees Drive storage)",
-                                fontFamily = CambriaFont,
-                                fontSize = 13.sp
-                            )
-                        }
-
                         // 🚀 START BUTTON
                         Button(
                             onClick = {
+                                if (serverUrl.isBlank()) {
+                                    logMessages.add("❌ Error: Cloud Worker URL is empty!")
+                                    logMessages.add("👉 Please run the Colab Worker and paste your Cloudflare URL above.")
+                                    return@Button
+                                }
+
                                 if (!isExtracting) {
                                     isExtracting = true
                                     progressPercent = 0
                                     logMessages.clear()
-                                    logMessages.add("🚀 Starting Cloud Extraction for: $connectedAccount")
+                                    logMessages.add("🚀 Dispatching Cloud Extraction...")
                                     logMessages.add("📂 Source: MyDrive/$sourceFolder")
                                     logMessages.add("🎯 Target: MyDrive/$destinationFolder")
 
                                     coroutineScope.launch {
-                                        executeExtraction(
-                                            useDirectMode = useDirectCloudMode,
+                                        executeRealExtraction(
                                             serverUrl = serverUrl,
-                                            account = connectedAccount,
                                             sourceFolder = sourceFolder,
                                             destFolder = destinationFolder,
                                             exactFile = exactFileName,
-                                            deleteAfter = deleteAfter,
                                             password = password,
                                             onProgress = { pct, msg ->
                                                 progressPercent = pct
@@ -500,7 +625,7 @@ fun UnzipScreen() {
                 }
             }
 
-            // 📜 Live Cloud Logs (Moved Up with High Visibility!)
+            // 📜 Live Cloud Logs (Elevated above bottom navigation bar)
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
@@ -529,7 +654,7 @@ fun UnzipScreen() {
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF33333E)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 120.dp, max = 180.dp)
+                            .heightIn(min = 130.dp, max = 220.dp)
                     ) {
                         LazyColumn(
                             modifier = Modifier
@@ -542,8 +667,8 @@ fun UnzipScreen() {
                                     text = log,
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 12.sp,
-                                    color = if (log.contains("❌") || log.contains("Error")) Color(0xFFFF5252)
-                                    else if (log.contains("🎉") || log.contains("✅")) Color(0xFF69F0AE)
+                                    color = if (log.contains("❌") || log.contains("Error") || log.contains("Failed")) Color(0xFFFF5252)
+                                    else if (log.contains("🎉") || log.contains("✅") || log.contains("SUCCESS")) Color(0xFF69F0AE)
                                     else Color(0xFF80D8FF)
                                 )
                             }
@@ -554,114 +679,79 @@ fun UnzipScreen() {
 
             // Bottom Spacing so navigation bar never overlaps
             item {
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(36.dp))
             }
         }
     }
 }
 
 /**
- * Executes the cloud extraction:
- * - Direct Cloud Runner (High-speed zero-server pipeline)
- * - Or Custom Cloud Worker Server
+ * Connects directly to the active Cloud Worker (Colab Cloudflare Tunnel / Server)
+ * and streams REAL extraction progress from 7-Zip executing in Google's cloud.
  */
-suspend fun executeExtraction(
-    useDirectMode: Boolean,
+suspend fun executeRealExtraction(
     serverUrl: String,
-    account: String,
     sourceFolder: String,
     destFolder: String,
     exactFile: String,
-    deleteAfter: Boolean,
     password: String,
     onProgress: (Int, String) -> Unit,
     onComplete: () -> Unit
 ) = withContext(Dispatchers.IO) {
-    if (useDirectMode) {
-        // ⚡ Direct Cloud Pipeline Mode
-        try {
-            onProgress(10, "🔍 Connecting to Google Drive for $account...")
-            delay(800)
-            onProgress(25, "📦 Scanning folder 'MyDrive/$sourceFolder'...")
-            delay(900)
-            val archiveName = if (exactFile.isNotBlank()) exactFile else "Elite.Force.S01.1080p.DS4K.SDR.10bit...zip"
-            onProgress(40, "🎯 Target archive found: $archiveName")
-            delay(900)
-            onProgress(60, "🚀 Extracting series in Google Cloud (10Gbps backbone)...")
-            delay(1200)
-            onProgress(85, "📂 Writing extracted video files to 'MyDrive/$destFolder'...")
-            delay(1000)
-            if (deleteAfter) {
-                onProgress(95, "🗑️ Deleting original archive to free Drive storage...")
-                delay(600)
-            }
-            onProgress(100, "🎉 ✅ SUCCESS! All files extracted directly into your Google Drive.")
-        } catch (e: Exception) {
-            onProgress(0, "❌ Error: ${e.localizedMessage}")
-        } finally {
-            withContext(Dispatchers.Main) {
-                onComplete()
-            }
-        }
-    } else {
-        // 🌐 Remote Server Mode via OkHttp
-        val client = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+    val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(300, TimeUnit.SECONDS)
+        .build()
+
+    val json = JSONObject().apply {
+        put("source_folder", sourceFolder)
+        put("destination_folder", destFolder)
+        put("exact_file_name", exactFile)
+        put("password", password)
+    }
+
+    val requestBody = json.toString().toRequestBody("application/json".toMediaType())
+    val endpoint = "${serverUrl.trimEnd('/')}/api/extract-stream"
+
+    try {
+        val request = Request.Builder()
+            .url(endpoint)
+            .post(requestBody)
             .build()
 
-        val json = JSONObject().apply {
-            put("account", account)
-            put("source_folder", sourceFolder)
-            put("destination_folder", destFolder)
-            put("exact_file_name", exactFile)
-            put("delete_after", deleteAfter)
-            put("password", password)
+        val response = client.newCall(request).execute()
+        if (!response.isSuccessful) {
+            withContext(Dispatchers.Main) {
+                onProgress(0, "❌ Server returned HTTP ${response.code}: Check your backend URL.")
+            }
+            return@withContext
         }
 
-        val requestBody = json.toString().toRequestBody("application/json".toMediaType())
-        val endpoint = "${serverUrl.trimEnd('/')}/api/extract-stream"
+        val reader = BufferedReader(InputStreamReader(response.body?.byteStream()))
+        var line: String?
 
-        try {
-            val request = Request.Builder()
-                .url(endpoint)
-                .post(requestBody)
-                .build()
-
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                withContext(Dispatchers.Main) {
-                    onProgress(0, "❌ Server returned HTTP ${response.code}: Check your backend URL.")
-                }
-                return@withContext
+        while (reader.readLine().also { line = it } != null) {
+            val text = line ?: continue
+            if (text.startsWith("data: ")) {
+                val dataJson = text.removePrefix("data: ").trim()
+                try {
+                    val obj = JSONObject(dataJson)
+                    val msg = obj.optString("message", "")
+                    val pct = obj.optInt("progress", 0)
+                    withContext(Dispatchers.Main) {
+                        onProgress(pct, msg)
+                    }
+                } catch (_: Exception) {}
             }
-
-            val reader = BufferedReader(InputStreamReader(response.body?.byteStream()))
-            var line: String?
-
-            while (reader.readLine().also { line = it } != null) {
-                val text = line ?: continue
-                if (text.startsWith("data: ")) {
-                    val dataJson = text.removePrefix("data: ").trim()
-                    try {
-                        val obj = JSONObject(dataJson)
-                        val msg = obj.optString("message", "")
-                        val pct = obj.optInt("progress", 0)
-                        withContext(Dispatchers.Main) {
-                            onProgress(pct, msg)
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-        } catch (e: Exception) {
-            withContext(Dispatchers.Main) {
-                onProgress(0, "❌ Cannot connect to $serverUrl: ${e.localizedMessage ?: "Connection refused"}")
-                onProgress(0, "💡 Tip: Switch to 'Direct Cloud Runner' to extract without an external server!")
-            }
-        } finally {
-            withContext(Dispatchers.Main) {
-                onComplete()
-            }
+        }
+    } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+            onProgress(0, "❌ Connection Error: ${e.localizedMessage ?: "Failed to connect"}")
+            onProgress(0, "💡 Check if your Colab Cloud Worker cell is currently running!")
+        }
+    } finally {
+        withContext(Dispatchers.Main) {
+            onComplete()
         }
     }
 }

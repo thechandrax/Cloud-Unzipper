@@ -3,14 +3,13 @@ import os
 import glob
 import subprocess
 import json
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-app = FastAPI(title="Drive Cloud Unzipper API", version="1.0.0")
+app = FastAPI(title="Drive Cloud Unzipper API", version="1.1.0")
 
-# Enable CORS for mobile app requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,61 +22,74 @@ class ExtractRequest(BaseModel):
     source_folder: str = "GDFlix"
     destination_folder: str = "MOVIES & WEB SERIES INFO"
     exact_file_name: str = ""
-    delete_after: bool = False
     password: str = ""
 
 @app.get("/")
 def health_check():
-    return {"status": "online", "message": "Cloud Unzipper Backend is ready!"}
+    drive_mounted = os.path.exists("/content/drive/MyDrive")
+    return {
+        "status": "online",
+        "drive_mounted": drive_mounted,
+        "message": "Cloud Unzipper Backend is ready!"
+    }
 
 @app.post("/api/extract-stream")
 async def extract_stream(req: ExtractRequest):
-    """
-    Streams extraction progress line-by-line via Server-Sent Events (SSE)
-    directly to the Native Android App.
-    """
     async def event_generator():
-        yield f"data: {json.dumps({'status': 'starting', 'message': '🚀 Initializing Cloud Extraction...'})}\n\n"
-        await asyncio.sleep(0.5)
+        yield f"data: {json.dumps({'status': 'starting', 'message': '🚀 Initializing Cloud Extraction engine...'})}\n\n"
+        await asyncio.sleep(0.3)
 
-        # In cloud environments with Rclone or Google Drive Mount
+        # Drive base directory in Google Colab
         drive_base = os.getenv("DRIVE_MOUNT_PATH", "/content/drive/MyDrive")
+        if not os.path.exists(drive_base):
+            yield f"data: {json.dumps({'status': 'error', 'message': '❌ Google Drive not mounted at /content/drive/MyDrive! Please run drive.mount in Colab.'})}\n\n"
+            return
+
         src_path = os.path.join(drive_base, req.source_folder.strip("/"))
         dest_path = os.path.join(drive_base, req.destination_folder.strip("/"))
 
-        yield f"data: {json.dumps({'status': 'scanning', 'message': f'🔍 Scanning folder: {req.source_folder}...' })}\n\n"
-        await asyncio.sleep(0.5)
+        yield f"data: {json.dumps({'status': 'scanning', 'message': f'🔍 Scanning: {src_path}'})}\n\n"
+        await asyncio.sleep(0.3)
 
-        # Detect archive
-        target_archive = None
-        if req.exact_file_name:
-            target_archive = os.path.join(src_path, req.exact_file_name)
-        else:
-            if os.path.exists(src_path):
-                exts = ('*.zip', '*.rar', '*.7z', '*.tar', '*.tgz')
-                files = []
-                for ext in exts:
-                    files.extend(glob.glob(os.path.join(src_path, ext)))
-                    files.extend(glob.glob(os.path.join(src_path, ext.upper())))
-                if files:
-                    files.sort(key=os.path.getmtime, reverse=True)
-                    target_archive = files[0]
-
-        if not target_archive or not os.path.exists(target_archive):
-            # Fallback mock/simulation response for testing if no local drive mounted
-            yield f"data: {json.dumps({'status': 'info', 'message': f'📦 Processing archive: {req.exact_file_name or \"Newest detected archive\"}'})}\n\n"
-            for pct in range(10, 101, 15):
-                await asyncio.sleep(0.8)
-                yield f"data: {json.dumps({'status': 'progress', 'progress': pct, 'message': f'Extracting series in cloud: {pct}% complete'})}\n\n"
-            yield f"data: {json.dumps({'status': 'success', 'progress': 100, 'message': '🎉 Extraction Completed! Files ready in Google Drive.'})}\n\n"
+        if not os.path.exists(src_path):
+            yield f"data: {json.dumps({'status': 'error', 'message': f'❌ Source folder not found: {src_path}'})}\n\n"
             return
 
-        # Real 7-Zip Cloud Process
+        # Target archive detection
+        target_archive = None
+        if req.exact_file_name.strip():
+            candidate = os.path.join(src_path, req.exact_file_name.strip())
+            if os.path.exists(candidate):
+                target_archive = candidate
+            else:
+                # Fuzzy match in folder
+                for f in os.listdir(src_path):
+                    if req.exact_file_name.strip().lower() in f.lower():
+                        target_archive = os.path.join(src_path, f)
+                        break
+
+        if not target_archive:
+            # Auto-find newest archive
+            exts = ('*.zip', '*.rar', '*.7z', '*.tar', '*.tgz')
+            files = []
+            for ext in exts:
+                files.extend(glob.glob(os.path.join(src_path, ext)))
+                files.extend(glob.glob(os.path.join(src_path, ext.upper())))
+            if files:
+                files.sort(key=os.path.getmtime, reverse=True)
+                target_archive = files[0]
+
+        if not target_archive or not os.path.exists(target_archive):
+            existing = [f for f in os.listdir(src_path) if f.endswith(('.zip', '.rar', '.7z', '.mkv'))][:5]
+            yield f"data: {json.dumps({'status': 'error', 'message': f'❌ No matching archive found in {req.source_folder}. Existing files: {existing}'})}\n\n"
+            return
+
         os.makedirs(dest_path, exist_ok=True)
         file_size_gb = os.path.getsize(target_archive) / (1024 ** 3)
         file_name = os.path.basename(target_archive)
 
-        yield f"data: {json.dumps({'status': 'progress', 'progress': 5, 'message': f'📦 File: {file_name} ({file_size_gb:.2f} GB)'})}\n\n"
+        yield f"data: {json.dumps({'status': 'progress', 'progress': 10, 'message': f'🎯 Target: {file_name} ({file_size_gb:.2f} GB)'})}\n\n"
+        yield f"data: {json.dumps({'status': 'progress', 'progress': 20, 'message': f'📂 Extracting to: MyDrive/{req.destination_folder}'})}\n\n"
 
         cmd = ["7z", "x", "-y", f"-o{dest_path}"]
         if req.password:
@@ -91,19 +103,15 @@ async def extract_stream(req: ExtractRequest):
         for line in iter(proc.stdout.readline, ''):
             line_str = line.strip()
             if "%" in line_str or "Extracting" in line_str:
-                yield f"data: {json.dumps({'status': 'progress', 'message': line_str[:90]})}\n\n"
-                await asyncio.sleep(0.05)
+                yield f"data: {json.dumps({'status': 'progress', 'message': f'⏳ {line_str[:80]}'})}\n\n"
+                await asyncio.sleep(0.04)
 
         proc.wait()
 
         if proc.returncode == 0:
-            if req.delete_after:
-                os.remove(target_archive)
-                yield f"data: {json.dumps({'status': 'success', 'progress': 100, 'message': '🎉 Extraction Complete! Original archive removed.'})}\n\n"
-            else:
-                yield f"data: {json.dumps({'status': 'success', 'progress': 100, 'message': '🎉 Extraction Complete! All files extracted.'})}\n\n"
+            yield f"data: {json.dumps({'status': 'success', 'progress': 100, 'message': f'🎉 ✅ SUCCESS! All files extracted into MyDrive/{req.destination_folder}'})}\n\n"
         else:
-            yield f"data: {json.dumps({'status': 'error', 'message': f'❌ Failed with error code {proc.returncode}'})}\n\n"
+            yield f"data: {json.dumps({'status': 'error', 'message': f'❌ 7-Zip failed with code {proc.returncode}. Corrupted archive or password required.'})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
