@@ -512,7 +512,9 @@ fun UnzipScreen() {
                                             exactFile = exactFileName,
                                             password = password,
                                             onProgress = { pct, msg ->
-                                                progressPercent = pct
+                                                if (pct in 0..100 && pct >= progressPercent) {
+                                                    progressPercent = pct
+                                                }
                                                 currentStatus = msg
                                                 if (pct > 0) {
                                                     hasError = false
@@ -750,7 +752,19 @@ suspend fun executeRealExtraction(
                     val obj = JSONObject(dataJson)
                     val status = obj.optString("status", "")
                     val msg = obj.optString("message", "")
-                    val pct = obj.optInt("progress", 0)
+                    
+                    // Parse progress from JSON or from regex pattern in message (e.g., "15%", "45%")
+                    val pctFromJson = if (obj.has("progress")) obj.getInt("progress") else -1
+                    val pctFromMsg = if (pctFromJson < 0) {
+                        val match = Regex("""(\d+)%""").find(msg)
+                        match?.groupValues?.get(1)?.toIntOrNull() ?: -1
+                    } else -1
+
+                    val resolvedPct = when {
+                        pctFromJson >= 0 -> pctFromJson
+                        pctFromMsg >= 0 -> pctFromMsg
+                        else -> -1
+                    }
 
                     lastMessage = msg
                     if (status == "success") {
@@ -760,7 +774,7 @@ suspend fun executeRealExtraction(
                     }
 
                     withContext(Dispatchers.Main) {
-                        onProgress(pct, msg)
+                        onProgress(resolvedPct, msg)
                     }
                 } catch (_: Exception) {}
             }

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import zipfile
 import json
+import re
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -127,8 +128,14 @@ async def extract_stream(req: ExtractRequest):
             for line in iter(proc.stdout.readline, ''):
                 l = line.strip()
                 if "%" in l or "Extracting" in l:
-                    yield f"data: {json.dumps({'status': 'progress', 'message': f'⏳ {l[:80]}'})}\n\n"
-                    await asyncio.sleep(0.04)
+                    m_pct = re.search(r'(\d+)%', l)
+                    pct_val = int(m_pct.group(1)) if m_pct else None
+                    payload = {'status': 'progress', 'message': f'⏳ {l[:80]}'}
+                    if pct_val is not None:
+                        mapped = 30 + int(pct_val * 0.68)
+                        payload['progress'] = mapped
+                    yield f"data: {json.dumps(payload)}\n\n"
+                    await asyncio.sleep(0.03)
             proc.wait()
             extraction_success = (proc.returncode == 0)
 
