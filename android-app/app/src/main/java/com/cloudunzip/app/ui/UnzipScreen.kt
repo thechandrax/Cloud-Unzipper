@@ -356,7 +356,7 @@ fun UnzipScreen() {
         val detected = getInstalledBrowsers(context)
         installedBrowsers = detected
         if (logMessages.isEmpty()) {
-            logMessages.add("📱 Cloud Unzipper v1.5.2 ready.")
+            logMessages.add("📱 Cloud_Unzipper v1.5.3 ready.")
             logMessages.add("👤 Google Account: $connectedAccount")
             if (detected.isNotEmpty()) {
                 logMessages.add("🌐 Browsers detected: ${detected.joinToString { it.name }}")
@@ -478,7 +478,7 @@ fun UnzipScreen() {
                                         .fillMaxWidth()
                                         .clickable {
                                             showBrowserDialog = false
-                                            val colabUrl = "https://colab.research.google.com/github/thechandrax/Drive-Unzipper/blob/main/Drive_Cloud_Unzipper.ipynb"
+                                            val colabUrl = "https://colab.research.google.com/github/thechandrax/Cloud-Unzipper/blob/main/Cloud_Unzipper.ipynb"
                                             val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(colabUrl)).apply {
                                                 setPackage(browser.packageName)
                                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -561,7 +561,7 @@ fun UnzipScreen() {
                     // 📋 Manual Copy Option
                     OutlinedButton(
                         onClick = {
-                            val colabUrl = "https://colab.research.google.com/github/thechandrax/Drive-Unzipper/blob/main/Drive_Cloud_Unzipper.ipynb"
+                            val colabUrl = "https://colab.research.google.com/github/thechandrax/Cloud-Unzipper/blob/main/Cloud_Unzipper.ipynb"
                             clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(colabUrl))
                             logMessages.add("📋 Copied Colab link to clipboard! Paste it into any browser.")
                             showBrowserDialog = false
@@ -916,7 +916,7 @@ fun UnzipScreen() {
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "Cloud Unzipper",
+                                    text = "Cloud_Unzipper",
                                     fontFamily = CambriaFont,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 19.sp,
@@ -928,7 +928,7 @@ fun UnzipScreen() {
                                     color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        text = "v1.5.2",
+                                        text = "v1.5.3",
                                         fontFamily = CambriaFont,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,

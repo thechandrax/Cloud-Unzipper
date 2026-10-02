@@ -53,7 +53,7 @@
     <application
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher_colorful"
-        android:label="Cloud Unzipper"
+        android:label="Cloud_Unzipper"
         android:roundIcon="@drawable/ic_launcher_colorful"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar"
