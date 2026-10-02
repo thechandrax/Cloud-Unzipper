@@ -207,6 +207,7 @@ fun UnzipScreen() {
     }
     var destinationFolder by remember {
         mutableStateOf(prefs.getString("dest_folder", "MOVIES & WEB SERIES INFO") ?: "MOVIES & WEB SERIES INFO")
+    }
     var exactFileName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
@@ -1061,7 +1062,6 @@ fun UnzipScreen() {
                         }
                     }
                 }
-            }
             } else {
                 // 📥 Web / Direct Link Transfer Card
                 item {
@@ -1293,7 +1293,6 @@ fun UnzipScreen() {
                         }
                     }
                 }
-            }
 
             // 📊 Cloud Status & Progress Card (Only shows success when genuine!)
             item {
