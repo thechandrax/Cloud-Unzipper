@@ -274,7 +274,7 @@ fun UnzipScreen() {
         val detected = getInstalledBrowsers(context)
         installedBrowsers = detected
         if (logMessages.isEmpty()) {
-            logMessages.add("📱 Cloud Unzipper v1.4.1 ready.")
+            logMessages.add("📱 Cloud Unzipper v1.5.1 ready.")
             logMessages.add("👤 Google Account: $connectedAccount")
             if (detected.isNotEmpty()) {
                 logMessages.add("🌐 Browsers detected: ${detected.joinToString { it.name }}")
@@ -563,7 +563,7 @@ fun UnzipScreen() {
                                     color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        text = "v1.5.0",
+                                        text = "v1.5.1",
                                         fontFamily = CambriaFont,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
@@ -685,12 +685,47 @@ fun UnzipScreen() {
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
                             )
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isServerOnline) Color(0xFF4CAF50) else Color(0xFFFF5252))
-                            )
+                            if (isCheckingHealth) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else if (isServerOnline) {
+                                // 🟢 Flickering / Pulsing Green Bubble (Top indicator as requested)
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.size(20.dp)
+                                ) {
+                                    // Outer pulsing glow
+                                    Box(
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .graphicsLayer {
+                                                scaleX = pulseScale
+                                                scaleY = pulseScale
+                                                alpha = pulseAlpha * 0.45f
+                                            }
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF4CAF50))
+                                    )
+                                    // Core flickering green dot
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .graphicsLayer { alpha = pulseAlpha }
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF00E676))
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFF5252))
+                                )
+                            }
                         }
 
                         // 🌐 Button: GENERATE CLOUDFLARE LINK (Scans installed browsers and shows chooser dialog)
@@ -728,6 +763,9 @@ fun UnzipScreen() {
                             onValueChange = {
                                 serverUrl = it.trim()
                                 persistSettings()
+                                if (serverUrl.startsWith("http://") || serverUrl.startsWith("https://")) {
+                                    checkServerHealth()
+                                }
                             },
                             label = { Text("Cloud Server URL", fontFamily = CambriaFont, fontSize = 12.sp) },
                             placeholder = { Text("https://xxxx.trycloudflare.com", fontFamily = CambriaFont, fontSize = 12.sp) },
@@ -754,108 +792,6 @@ fun UnzipScreen() {
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp)
                         )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (isServerOnline) {
-                                // 🟢 Flickering / Pulsing Green Bubble (Requested by user)
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier.size(24.dp)
-                                    ) {
-                                        // Outer pulsing glow
-                                        Box(
-                                            modifier = Modifier
-                                                .size(20.dp)
-                                                .graphicsLayer {
-                                                    scaleX = pulseScale
-                                                    scaleY = pulseScale
-                                                    alpha = pulseAlpha * 0.45f
-                                                }
-                                                .clip(CircleShape)
-                                                .background(Color(0xFF4CAF50))
-                                        )
-                                        // Core flickering green dot
-                                        Box(
-                                            modifier = Modifier
-                                                .size(12.dp)
-                                                .graphicsLayer { alpha = pulseAlpha }
-                                                .clip(CircleShape)
-                                                .background(Color(0xFF00E676))
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Online",
-                                        fontFamily = CambriaFont,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = Color(0xFF2E7D32)
-                                    )
-                                }
-                            } else {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(10.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFFFF5252))
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (serverUrl.isBlank()) "No URL" else "Offline",
-                                        fontFamily = CambriaFont,
-                                        fontSize = 12.sp,
-                                        color = Color(0xFFC62828)
-                                    )
-                                }
-                            }
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = {
-                                        val clip = clipboardManager.getText()?.text?.trim() ?: ""
-                                        if (clip.isNotBlank()) {
-                                            serverUrl = clip
-                                            persistSettings()
-                                            checkServerHealth()
-                                        }
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentPaste,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Paste", fontFamily = CambriaFont, fontSize = 12.sp)
-                                }
-                                Button(
-                                    onClick = { checkServerHealth() },
-                                    enabled = !isCheckingHealth,
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    if (isCheckingHealth) {
-                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White)
-                                    } else {
-                                        Text("Test Link", fontFamily = CambriaFont, fontSize = 12.sp)
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -1104,37 +1040,27 @@ fun UnzipScreen() {
                                     placeholder = {
                                         Text("Paste GDFlix, GoFile, or direct URL...", fontFamily = CambriaFont, fontSize = 12.sp)
                                     },
-                                    leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                                    trailingIcon = {
-                                        if (webDownloadUrl.isNotBlank()) {
-                                            IconButton(onClick = { webDownloadUrl = "" }) {
-                                                Icon(Icons.Default.Clear, contentDescription = "Clear")
-                                            }
-                                        }
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                     },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End
-                                ) {
-                                    OutlinedButton(
-                                        onClick = {
+                                    trailingIcon = {
+                                        IconButton(onClick = {
                                             val clip = clipboardManager.getText()?.text?.trim() ?: ""
                                             if (clip.isNotBlank()) {
                                                 webDownloadUrl = clip
                                             }
-                                        },
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(14.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Paste Link", fontFamily = CambriaFont, fontSize = 11.sp)
-                                    }
-                                }
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Default.ContentPaste,
+                                                contentDescription = "Paste from Clipboard",
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
                             }
 
                             // --- Save to Drive Folder ---
