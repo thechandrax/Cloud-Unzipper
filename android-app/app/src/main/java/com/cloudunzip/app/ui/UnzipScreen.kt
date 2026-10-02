@@ -53,52 +53,96 @@ data class InstalledBrowser(
 )
 
 /**
- * Scans all installed web browsers on the device (Android 11+ compatible).
+ * Scans all installed web browsers on the device using multiple detection strategies.
  */
 fun getInstalledBrowsers(context: Context): List<InstalledBrowser> {
     val pm = context.packageManager
-    val testIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://colab.research.google.com"))
-    val resolveList = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-        pm.queryIntentActivities(testIntent, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong()))
-    } else {
-        @Suppress("DEPRECATION")
-        pm.queryIntentActivities(testIntent, PackageManager.MATCH_ALL)
-    }
-
     val browsers = mutableListOf<InstalledBrowser>()
     val seenPackages = mutableSetOf<String>()
 
-    for (info in resolveList) {
-        val pkg = info.activityInfo.packageName
-        if (pkg == context.packageName || pkg in seenPackages) continue
-        seenPackages.add(pkg)
-
-        val name = try {
-            info.loadLabel(pm).toString()
-        } catch (_: Exception) {
-            pkg
-        }
-
-        val iconBmp: ImageBitmap? = try {
-            val d: Drawable? = info.loadIcon(pm)
-            if (d != null) {
-                if (d is BitmapDrawable && d.bitmap != null) {
-                    d.bitmap.asImageBitmap()
-                } else {
-                    val w = if (d.intrinsicWidth > 0) d.intrinsicWidth else 96
-                    val h = if (d.intrinsicHeight > 0) d.intrinsicHeight else 96
-                    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(bmp)
-                    d.setBounds(0, 0, canvas.width, canvas.height)
-                    d.draw(canvas)
-                    bmp.asImageBitmap()
+    fun addFromPackage(pkg: String, defaultName: String? = null) {
+        if (pkg == context.packageName || pkg in seenPackages) return
+        try {
+            val appInfo = pm.getApplicationInfo(pkg, 0)
+            if (appInfo.enabled) {
+                seenPackages.add(pkg)
+                val label = try { appInfo.loadLabel(pm).toString() } catch (_: Exception) { defaultName ?: pkg }
+                val iconBmp: ImageBitmap? = try {
+                    val d = appInfo.loadIcon(pm)
+                    if (d is BitmapDrawable && d.bitmap != null) {
+                        d.bitmap.asImageBitmap()
+                    } else if (d != null) {
+                        val w = if (d.intrinsicWidth > 0) d.intrinsicWidth else 96
+                        val h = if (d.intrinsicHeight > 0) d.intrinsicHeight else 96
+                        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                        val canvas = Canvas(bmp)
+                        d.setBounds(0, 0, canvas.width, canvas.height)
+                        d.draw(canvas)
+                        bmp.asImageBitmap()
+                    } else null
+                } catch (_: Exception) {
+                    null
                 }
-            } else null
-        } catch (_: Exception) {
-            null
-        }
+                browsers.add(InstalledBrowser(name = label, packageName = pkg, iconBitmap = iconBmp))
+            }
+        } catch (_: Exception) {}
+    }
 
-        browsers.add(InstalledBrowser(name = name, packageName = pkg, iconBitmap = iconBmp))
+    // 1. Query by Browsable HTTPS Intent
+    try {
+        val browsableIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://colab.research.google.com")).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+        }
+        val resolveList = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            pm.queryIntentActivities(browsableIntent, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong()))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.queryIntentActivities(browsableIntent, PackageManager.MATCH_ALL)
+        }
+        for (info in resolveList) {
+            addFromPackage(info.activityInfo.packageName, info.loadLabel(pm).toString())
+        }
+    } catch (_: Exception) {}
+
+    // 2. Query standard ACTION_VIEW
+    try {
+        val standardIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://google.com"))
+        val resolveList = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            pm.queryIntentActivities(standardIntent, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong()))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.queryIntentActivities(standardIntent, PackageManager.MATCH_ALL)
+        }
+        for (info in resolveList) {
+            addFromPackage(info.activityInfo.packageName, info.loadLabel(pm).toString())
+        }
+    } catch (_: Exception) {}
+
+    // 3. Explicit check for common Android browsers
+    val popularBrowsers = listOf(
+        "com.android.chrome" to "Google Chrome",
+        "com.sec.android.app.sbrowser" to "Samsung Internet",
+        "com.brave.browser" to "Brave Browser",
+        "org.mozilla.firefox" to "Mozilla Firefox",
+        "com.microsoft.emmx" to "Microsoft Edge",
+        "com.opera.browser" to "Opera Browser",
+        "com.opera.mini.native" to "Opera Mini",
+        "com.opera.gx" to "Opera GX",
+        "com.duckduckgo.mobile.android" to "DuckDuckGo",
+        "com.vivaldi.browser" to "Vivaldi",
+        "com.kiwibrowser.browser" to "Kiwi Browser",
+        "com.mi.globalbrowser" to "Mi Browser",
+        "com.android.browser" to "Android Browser",
+        "com.coloros.browser" to "ColorOS Browser",
+        "com.vivo.browser" to "Vivo Browser",
+        "com.heytap.browser" to "HeyTap Browser",
+        "com.transsion.phoenix" to "Phoenix Browser",
+        "mark.via.gp" to "Via Browser",
+        "org.torproject.torbrowser" to "Tor Browser"
+    )
+
+    for ((pkg, defaultName) in popularBrowsers) {
+        addFromPackage(pkg, defaultName)
     }
 
     return browsers.sortedBy { it.name.lowercase() }
@@ -192,14 +236,19 @@ fun UnzipScreen() {
         }
     }
 
-    // Auto-check connection on start if URL exists
+    // Auto-check connection and pre-scan installed browsers on start
     LaunchedEffect(Unit) {
         if (serverUrl.isNotBlank()) {
             checkServerHealth()
         }
+        val detected = getInstalledBrowsers(context)
+        installedBrowsers = detected
         if (logMessages.isEmpty()) {
-            logMessages.add("📱 Cloud Unzipper ready.")
+            logMessages.add("📱 Cloud Unzipper v1.4.1 ready.")
             logMessages.add("👤 Google Account: $connectedAccount")
+            if (detected.isNotEmpty()) {
+                logMessages.add("🌐 Browsers detected: ${detected.joinToString { it.name }}")
+            }
         }
     }
 
@@ -302,18 +351,11 @@ fun UnzipScreen() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    if (installedBrowsers.isEmpty()) {
-                        Text(
-                            text = "No dedicated browsers detected. Tap 'Open with Default' below.",
-                            fontFamily = CambriaFont,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    } else {
+                    if (installedBrowsers.isNotEmpty()) {
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(max = 340.dp),
+                                .heightIn(max = 300.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(installedBrowsers) { browser ->
@@ -403,27 +445,32 @@ fun UnzipScreen() {
                             }
                         }
                     }
-                }
-            },
-            confirmButton = {
-                if (installedBrowsers.isEmpty()) {
-                    Button(
+
+                    // 📋 Manual Copy Option
+                    OutlinedButton(
                         onClick = {
-                            showBrowserDialog = false
                             val colabUrl = "https://colab.research.google.com/github/thechandrax/Drive-Unzipper/blob/main/Drive_Cloud_Unzipper.ipynb"
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(colabUrl)).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            context.startActivity(Intent.createChooser(intent, "Open Colab Notebook"))
-                        }
+                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(colabUrl))
+                            logMessages.add("📋 Copied Colab link to clipboard! Paste it into any browser.")
+                            showBrowserDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Open with Default", fontFamily = CambriaFont)
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Copy Link (Paste in any Browser)", fontFamily = CambriaFont, fontSize = 12.sp)
                     }
                 }
             },
+            confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showBrowserDialog = false }) {
-                    Text("Cancel", fontFamily = CambriaFont)
+                    Text("Close", fontFamily = CambriaFont)
                 }
             }
         )
@@ -472,13 +519,29 @@ fun UnzipScreen() {
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text(
-                                text = "Cloud Unzipper",
-                                fontFamily = CambriaFont,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 21.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Cloud Unzipper",
+                                    fontFamily = CambriaFont,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 19.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Text(
+                                        text = "v1.4.1",
+                                        fontFamily = CambriaFont,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
                             Text(
                                 text = "High-Speed Drive Extractor",
                                 fontFamily = CambriaFont,
