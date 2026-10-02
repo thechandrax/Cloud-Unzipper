@@ -1,6 +1,8 @@
 package com.cloudunzip.app.ui
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -346,7 +348,7 @@ fun UnzipScreen() {
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -366,6 +368,48 @@ fun UnzipScreen() {
                                     .background(if (isServerOnline) Color(0xFF4CAF50) else Color(0xFFFF5252))
                             )
                         }
+
+                        // 🌐 Button: GENERATE CLOUDFLARE LINK (Opens Browser Chooser -> Colab Notebook)
+                        Button(
+                            onClick = {
+                                val colabUrl = "https://colab.research.google.com/github/thechandrax/Drive-Unzipper/blob/main/Drive_Cloud_Unzipper.ipynb"
+                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(colabUrl))
+                                val chooserIntent = Intent.createChooser(browserIntent, "Choose Browser to Open Colab")
+                                try {
+                                    context.startActivity(chooserIntent)
+                                } catch (e: Exception) {
+                                    logMessages.add("⚠️ Unable to launch browser: ${e.localizedMessage}")
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFE65100) // Vibrant Warm Amber / Orange
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.OpenInBrowser,
+                                contentDescription = null,
+                                tint = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "GENERATE CLOUDFLARE LINK",
+                                fontFamily = CambriaFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color.White
+                            )
+                        }
+
+                        Text(
+                            text = "💡 Tap above to open Colab in your browser, tap Play ▶️ to generate link, then copy & paste it below:",
+                            fontFamily = CambriaFont,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
 
                         OutlinedTextField(
                             value = serverUrl,
@@ -411,16 +455,38 @@ fun UnzipScreen() {
                                 color = if (isServerOnline) Color(0xFF2E7D32) else Color(0xFFC62828),
                                 modifier = Modifier.weight(1f)
                             )
-                            Button(
-                                onClick = { checkServerHealth() },
-                                enabled = !isCheckingHealth,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                if (isCheckingHealth) {
-                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White)
-                                } else {
-                                    Text("Test Link", fontFamily = CambriaFont, fontSize = 12.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = {
+                                        val clip = clipboardManager.getText()?.text?.trim() ?: ""
+                                        if (clip.isNotBlank()) {
+                                            serverUrl = clip
+                                            persistSettings()
+                                            checkServerHealth()
+                                        }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentPaste,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Paste", fontFamily = CambriaFont, fontSize = 12.sp)
+                                }
+                                Button(
+                                    onClick = { checkServerHealth() },
+                                    enabled = !isCheckingHealth,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    if (isCheckingHealth) {
+                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White)
+                                    } else {
+                                        Text("Test Link", fontFamily = CambriaFont, fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }
