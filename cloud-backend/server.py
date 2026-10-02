@@ -117,25 +117,33 @@ async def extract_stream(req: ExtractRequest):
 
         if has_7z:
             yield f"data: {json.dumps({'status': 'progress', 'progress': 30, 'message': '⚡ Engine: Multi-core 7-Zip acceleration active'})}\n\n"
-            cmd = ["7z", "x", "-y", f"-o{dest_path}"]
+            cmd = ["7z", "x", "-y", "-bsp1", "-mmt=on", f"-o{dest_path}"]
             if req.password:
                 cmd.append(f"-p{req.password}")
             else:
                 cmd.append("-p-")
             cmd.append(target_archive)
 
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            for line in iter(proc.stdout.readline, ''):
-                l = line.strip()
-                if "%" in l or "Extracting" in l:
-                    m_pct = re.search(r'(\d+)%', l)
-                    pct_val = int(m_pct.group(1)) if m_pct else None
-                    payload = {'status': 'progress', 'message': f'⏳ {l[:80]}'}
-                    if pct_val is not None:
-                        mapped = 30 + int(pct_val * 0.68)
-                        payload['progress'] = mapped
-                    yield f"data: {json.dumps(payload)}\n\n"
-                    await asyncio.sleep(0.03)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            buf = ""
+            while True:
+                char = proc.stdout.read(1)
+                if not char and proc.poll() is not None:
+                    break
+                if char:
+                    buf += char
+                    if char in ('\r', '\n'):
+                        l = buf.strip()
+                        buf = ""
+                        if l and ("%" in l or "Extracting" in l):
+                            m_pct = re.search(r'(\d+)%', l)
+                            pct_val = int(m_pct.group(1)) if m_pct else None
+                            payload = {'status': 'progress', 'message': f'⏳ {l[:80]}'}
+                            if pct_val is not None:
+                                mapped = 30 + int(pct_val * 0.68)
+                                payload['progress'] = mapped
+                            yield f"data: {json.dumps(payload)}\n\n"
+                            await asyncio.sleep(0.01)
             proc.wait()
             extraction_success = (proc.returncode == 0)
 
