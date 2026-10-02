@@ -58,6 +58,42 @@ def health_check():
         "message": "Cloud Unzipper Backend is ready!"
     }
 
+@app.get("/api/list-folders")
+def list_folders(path: str = ""):
+    drive_base = get_drive_base()
+    target_dir = os.path.join(drive_base, path.strip("/\\")) if path.strip("/\\") else drive_base
+    if not os.path.exists(target_dir):
+        return {"status": "error", "message": f"Folder not found: {path}", "folders": [], "archives": []}
+    try:
+        folders = []
+        archives = []
+        for item in sorted(os.listdir(target_dir), key=lambda s: s.lower()):
+            if item.startswith("."):
+                continue
+            full_path = os.path.join(target_dir, item)
+            if os.path.isdir(full_path):
+                folders.append(item)
+            elif item.lower().endswith(('.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.iso', '.mkv', '.mp4', '.avi')):
+                archives.append(item)
+        return {
+            "status": "success",
+            "current_path": path.strip("/\\"),
+            "folders": folders,
+            "archives": archives
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e), "folders": [], "archives": []}
+
+@app.post("/api/create-folder")
+def create_folder(folder_path: str):
+    drive_base = get_drive_base()
+    full_path = os.path.join(drive_base, folder_path.strip("/\\"))
+    try:
+        os.makedirs(full_path, exist_ok=True)
+        return {"status": "success", "folder": folder_path}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.post("/api/extract-stream")
 async def extract_stream(req: ExtractRequest):
     async def event_generator():

@@ -236,6 +236,88 @@ fun UnzipScreen() {
             .apply()
     }
 
+    // 📁 Interactive Drive Folder & File Browser State
+    var showFolderPickerDialog by remember { mutableStateOf(false) }
+    var pickerTarget by remember { mutableStateOf("source") } // "source", "target", "transfer_target", "archive"
+    var currentBrowsePath by remember { mutableStateOf("") }
+    var isFetchingFolders by remember { mutableStateOf(false) }
+    var driveFoldersList by remember { mutableStateOf(listOf<String>()) }
+    var driveArchivesList by remember { mutableStateOf(listOf<String>()) }
+    var folderPickerError by remember { mutableStateOf<String?>(null) }
+
+    fun fetchDriveFolders(subpath: String = "") {
+        if (serverUrl.isBlank()) {
+            folderPickerError = "Please connect your Cloud Server URL first to browse Google Drive."
+            isFetchingFolders = false
+            return
+        }
+        isFetchingFolders = true
+        folderPickerError = null
+        coroutineScope.launch(Dispatchers.IO) {
+            val client = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).build()
+            val encodedPath = java.net.URLEncoder.encode(subpath, "UTF-8")
+            val url = serverUrl.trimEnd('/') + "/api/list-folders?path=$encodedPath"
+            try {
+                val req = Request.Builder().url(url).build()
+                val resp = client.newCall(req).execute()
+                val body = resp.body?.string() ?: ""
+                if (resp.isSuccessful) {
+                    val json = JSONObject(body)
+                    if (json.optString("status") == "success") {
+                        val fArray = json.optJSONArray("folders")
+                        val aArray = json.optJSONArray("archives")
+                        val fList = mutableListOf<String>()
+                        if (fArray != null) {
+                            for (i in 0 until fArray.length()) fList.add(fArray.getString(i))
+                        }
+                        val aList = mutableListOf<String>()
+                        if (aArray != null) {
+                            for (i in 0 until aArray.length()) aList.add(aArray.getString(i))
+                        }
+                        withContext(Dispatchers.Main) {
+                            currentBrowsePath = subpath
+                            driveFoldersList = fList
+                            driveArchivesList = aList
+                            isFetchingFolders = false
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            folderPickerError = json.optString("message", "Error listing folders")
+                            isFetchingFolders = false
+                        }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        folderPickerError = "Server returned code ${resp.code}"
+                        isFetchingFolders = false
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    folderPickerError = e.localizedMessage ?: "Failed to connect to Cloud Worker"
+                    isFetchingFolders = false
+                }
+            }
+        }
+    }
+
+    fun applyChosenFolder(folder: String) {
+        when (pickerTarget) {
+            "source" -> {
+                sourceFolder = folder
+                persistSettings()
+            }
+            "target" -> {
+                destinationFolder = folder
+                persistSettings()
+            }
+            "transfer_target" -> {
+                sourceFolder = folder
+                persistSettings()
+            }
+        }
+    }
+
     // Function to test cloud server health
     fun checkServerHealth() {
         if (serverUrl.isBlank()) {
@@ -274,7 +356,7 @@ fun UnzipScreen() {
         val detected = getInstalledBrowsers(context)
         installedBrowsers = detected
         if (logMessages.isEmpty()) {
-            logMessages.add("📱 Cloud Unzipper v1.5.1 ready.")
+            logMessages.add("📱 Cloud Unzipper v1.5.2 ready.")
             logMessages.add("👤 Google Account: $connectedAccount")
             if (detected.isNotEmpty()) {
                 logMessages.add("🌐 Browsers detected: ${detected.joinToString { it.name }}")
@@ -506,6 +588,289 @@ fun UnzipScreen() {
         )
     }
 
+    // 📁 Interactive Google Drive Folder & Archive Picker Dialog
+    if (showFolderPickerDialog) {
+        val dialogTitle = when (pickerTarget) {
+            "archive" -> "📦 Select Archive File"
+            "source" -> "📂 Choose Source Folder"
+            "target" -> "🎯 Choose Target Folder"
+            "transfer_target" -> "📥 Choose Save Folder"
+            else -> "📁 Select Drive Folder"
+        }
+
+        AlertDialog(
+            onDismissRequest = { showFolderPickerDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (pickerTarget == "archive") Icons.Default.Inventory2 else Icons.Default.FolderOpen,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = dialogTitle,
+                        fontFamily = CambriaFont,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Breadcrumb navigation bar
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "MyDrive" + (if (currentBrowsePath.isNotEmpty()) "/$currentBrowsePath" else ""),
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (currentBrowsePath.isNotEmpty()) {
+                                TextButton(
+                                    onClick = {
+                                        val parent = if (currentBrowsePath.contains('/')) currentBrowsePath.substringBeforeLast('/') else ""
+                                        fetchDriveFolders(parent)
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Up", fontSize = 11.sp, fontFamily = CambriaFont)
+                                }
+                            }
+                            IconButton(
+                                onClick = { fetchDriveFolders(currentBrowsePath) },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+
+                    if (isFetchingFolders) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                                Text("Scanning Google Drive...", fontFamily = CambriaFont, fontSize = 12.sp)
+                            }
+                        }
+                    } else if (folderPickerError != null) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(folderPickerError ?: "", color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 12.sp, fontFamily = CambriaFont)
+                                Button(
+                                    onClick = { fetchDriveFolders(currentBrowsePath) },
+                                    modifier = Modifier.align(Alignment.End),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Retry", fontSize = 11.sp, fontFamily = CambriaFont)
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 260.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            // Archives section (if in archive mode)
+                            if (pickerTarget == "archive") {
+                                if (driveArchivesList.isNotEmpty()) {
+                                    item {
+                                        Text(
+                                            text = "Archives in this folder:",
+                                            fontFamily = CambriaFont,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    items(driveArchivesList) { arc ->
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    exactFileName = arc
+                                                    showFolderPickerDialog = false
+                                                }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                    Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(arc, fontFamily = CambriaFont, fontSize = 13.sp, maxLines = 1)
+                                                }
+                                                FilledTonalButton(
+                                                    onClick = {
+                                                        exactFileName = arc
+                                                        showFolderPickerDialog = false
+                                                    },
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("Pick", fontSize = 11.sp, fontFamily = CambriaFont)
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    item {
+                                        Text(
+                                            text = "No archives (.zip, .rar, .7z) found in this folder.",
+                                            fontFamily = CambriaFont,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Folders section
+                            if (driveFoldersList.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "Folders:",
+                                        fontFamily = CambriaFont,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                items(driveFoldersList) { folder ->
+                                    val fullFolder = if (currentBrowsePath.isEmpty()) folder else "$currentBrowsePath/$folder"
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clickable {
+                                                        fetchDriveFolders(fullFolder)
+                                                    }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Folder,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFFFA000),
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = folder,
+                                                    fontFamily = CambriaFont,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                TextButton(
+                                                    onClick = { fetchDriveFolders(fullFolder) },
+                                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("Open >", fontSize = 11.sp, fontFamily = CambriaFont)
+                                                }
+                                                FilledTonalButton(
+                                                    onClick = {
+                                                        applyChosenFolder(fullFolder)
+                                                        showFolderPickerDialog = false
+                                                    },
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("Select", fontSize = 11.sp, fontFamily = CambriaFont)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (pickerTarget != "archive") {
+                                item {
+                                    Text(
+                                        text = "No subfolders found in this directory.",
+                                        fontFamily = CambriaFont,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Select current directory button
+                    if (pickerTarget != "archive") {
+                        Button(
+                            onClick = {
+                                applyChosenFolder(currentBrowsePath)
+                                showFolderPickerDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Select Current: " + (if (currentBrowsePath.isEmpty()) "MyDrive (Root)" else currentBrowsePath),
+                                fontFamily = CambriaFont,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showFolderPickerDialog = false }) {
+                    Text("Close", fontFamily = CambriaFont)
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             Surface(
@@ -563,7 +928,7 @@ fun UnzipScreen() {
                                     color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        text = "v1.5.1",
+                                        text = "v1.5.2",
                                         fontFamily = CambriaFont,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
@@ -857,6 +1222,20 @@ fun UnzipScreen() {
                                     persistSettings()
                                 },
                                 leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) },
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        pickerTarget = "source"
+                                        currentBrowsePath = ""
+                                        showFolderPickerDialog = true
+                                        fetchDriveFolders("")
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Default.FolderOpen,
+                                            contentDescription = "Choose Source Folder from Drive",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(10.dp)
@@ -878,6 +1257,20 @@ fun UnzipScreen() {
                                     persistSettings()
                                 },
                                 leadingIcon = { Icon(Icons.Default.FolderSpecial, contentDescription = null) },
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        pickerTarget = "target"
+                                        currentBrowsePath = ""
+                                        showFolderPickerDialog = true
+                                        fetchDriveFolders("")
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Default.FolderOpen,
+                                            contentDescription = "Choose Target Folder from Drive",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(10.dp)
@@ -899,6 +1292,20 @@ fun UnzipScreen() {
                                     Text("Type archive name here (or leave empty for newest)", fontFamily = CambriaFont, fontSize = 13.sp)
                                 },
                                 leadingIcon = { Icon(Icons.Default.InsertDriveFile, contentDescription = null) },
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        pickerTarget = "archive"
+                                        currentBrowsePath = sourceFolder
+                                        showFolderPickerDialog = true
+                                        fetchDriveFolders(sourceFolder)
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Default.FilePresent,
+                                            contentDescription = "Pick Archive File from Drive",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(10.dp)
@@ -1078,6 +1485,20 @@ fun UnzipScreen() {
                                         persistSettings()
                                     },
                                     leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) },
+                                    trailingIcon = {
+                                        IconButton(onClick = {
+                                            pickerTarget = "transfer_target"
+                                            currentBrowsePath = ""
+                                            showFolderPickerDialog = true
+                                            fetchDriveFolders("")
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Default.FolderOpen,
+                                                contentDescription = "Choose Folder from Drive",
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true,
                                     shape = RoundedCornerShape(10.dp)
