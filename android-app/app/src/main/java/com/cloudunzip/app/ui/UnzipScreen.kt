@@ -356,7 +356,7 @@ fun UnzipScreen() {
         val detected = getInstalledBrowsers(context)
         installedBrowsers = detected
         if (logMessages.isEmpty()) {
-            logMessages.add("📱 Cloud_Unzipper v1.5.3 ready.")
+            logMessages.add("📱 Cloud_Unzipper v2.0.0 ready.")
             logMessages.add("👤 Google Account: $connectedAccount")
             if (detected.isNotEmpty()) {
                 logMessages.add("🌐 Browsers detected: ${detected.joinToString { it.name }}")
@@ -928,7 +928,7 @@ fun UnzipScreen() {
                                     color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        text = "v1.5.3",
+                                        text = "v2.0.0",
                                         fontFamily = CambriaFont,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,

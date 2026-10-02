@@ -3,7 +3,7 @@
 Extract gigabyte-sized archives (`.zip`, `.rar`, `.7z`) inside Google Drive with **0 MB phone storage** and **0 MB mobile data used**!
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/thechandrax/Cloud-Unzipper/blob/main/Cloud_Unzipper.ipynb)
-[![Download APK](https://img.shields.io/badge/Download-Android%20APK%20v1.5.3-brightgreen?logo=android)](https://github.com/thechandrax/Cloud-Unzipper/releases/latest)
+[![Download APK](https://img.shields.io/badge/Download-Android%20APK%20v2.0.0-brightgreen?logo=android)](https://github.com/thechandrax/Cloud-Unzipper/releases/latest)
 
 ---
 
