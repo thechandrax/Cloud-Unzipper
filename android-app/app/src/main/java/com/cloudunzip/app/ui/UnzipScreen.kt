@@ -1062,6 +1062,7 @@ fun UnzipScreen() {
                         }
                     }
                 }
+            }
             } else {
                 // 📥 Web / Direct Link Transfer Card
                 item {
@@ -1293,6 +1294,7 @@ fun UnzipScreen() {
                         }
                     }
                 }
+            }
 
             // 📊 Cloud Status & Progress Card (Only shows success when genuine!)
             item {
