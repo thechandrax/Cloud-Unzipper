@@ -9,6 +9,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -158,6 +160,27 @@ fun UnzipScreen() {
     val prefs = remember { context.getSharedPreferences("cloud_unzip_prefs", Context.MODE_PRIVATE) }
     val coroutineScope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
+
+    // 🟢 Flickering / Pulsing Green Bubble Animation
+    val pulseTransition = rememberInfiniteTransition(label = "greenPulse")
+    val pulseAlpha by pulseTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(650, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+    val pulseScale by pulseTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(650, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
 
     // 👤 Google Account State
     var connectedAccount by remember {
@@ -533,7 +556,7 @@ fun UnzipScreen() {
                                     color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        text = "v1.4.1",
+                                        text = "v1.4.2",
                                         fontFamily = CambriaFont,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
@@ -693,20 +716,13 @@ fun UnzipScreen() {
                             )
                         }
 
-                        Text(
-                            text = "💡 Tap above to open Colab in your browser, tap Play ▶️ to generate link, then copy & paste it below:",
-                            fontFamily = CambriaFont,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
-
                         OutlinedTextField(
                             value = serverUrl,
                             onValueChange = {
                                 serverUrl = it.trim()
                                 persistSettings()
                             },
-                            label = { Text("Cloud Server URL (trycloudflare)", fontFamily = CambriaFont, fontSize = 12.sp) },
+                            label = { Text("Cloud Server URL", fontFamily = CambriaFont, fontSize = 12.sp) },
                             placeholder = { Text("https://xxxx.trycloudflare.com", fontFamily = CambriaFont, fontSize = 12.sp) },
                             leadingIcon = {
                                 Icon(Icons.Default.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -737,13 +753,67 @@ fun UnzipScreen() {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = serverHealthText,
-                                fontFamily = CambriaFont,
-                                fontSize = 11.sp,
-                                color = if (isServerOnline) Color(0xFF2E7D32) else Color(0xFFC62828),
-                                modifier = Modifier.weight(1f)
-                            )
+                            if (isServerOnline) {
+                                // 🟢 Flickering / Pulsing Green Bubble (Requested by user)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        // Outer pulsing glow
+                                        Box(
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .graphicsLayer {
+                                                    scaleX = pulseScale
+                                                    scaleY = pulseScale
+                                                    alpha = pulseAlpha * 0.45f
+                                                }
+                                                .clip(CircleShape)
+                                                .background(Color(0xFF4CAF50))
+                                        )
+                                        // Core flickering green dot
+                                        Box(
+                                            modifier = Modifier
+                                                .size(12.dp)
+                                                .graphicsLayer { alpha = pulseAlpha }
+                                                .clip(CircleShape)
+                                                .background(Color(0xFF00E676))
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Online",
+                                        fontFamily = CambriaFont,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF2E7D32)
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFFF5252))
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (serverUrl.isBlank()) "No URL" else "Offline",
+                                        fontFamily = CambriaFont,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFC62828)
+                                    )
+                                }
+                            }
+
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
                                     onClick = {
@@ -847,7 +917,7 @@ fun UnzipScreen() {
                                 value = exactFileName,
                                 onValueChange = { exactFileName = it },
                                 placeholder = {
-                                    Text("Leave empty to auto extract newest", fontFamily = CambriaFont, fontSize = 13.sp)
+                                    Text("Type archive name here (or leave empty for newest)", fontFamily = CambriaFont, fontSize = 13.sp)
                                 },
                                 leadingIcon = { Icon(Icons.Default.InsertDriveFile, contentDescription = null) },
                                 modifier = Modifier.fillMaxWidth(),
