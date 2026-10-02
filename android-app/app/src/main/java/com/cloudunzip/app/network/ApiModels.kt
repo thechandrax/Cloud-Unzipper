@@ -13,3 +13,11 @@ data class ProgressUpdate(
     val progress: Int = 0,
     val message: String = ""
 )
+
+data class TransferRequest(
+    val url: String,
+    val destination_folder: String = "GDFlix",
+    val custom_filename: String = "",
+    val auto_extract: Boolean = true,
+    val extract_destination: String = "MOVIES & WEB SERIES INFO"
+)

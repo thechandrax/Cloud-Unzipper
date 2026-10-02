@@ -207,9 +207,15 @@ fun UnzipScreen() {
     }
     var destinationFolder by remember {
         mutableStateOf(prefs.getString("dest_folder", "MOVIES & WEB SERIES INFO") ?: "MOVIES & WEB SERIES INFO")
-    }
     var exactFileName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+
+    // 🔀 Operation Mode: 0 = Extract Archive, 1 = Web Transfer to Drive
+    var selectedOperationTab by remember { mutableIntStateOf(0) }
+
+    // 📥 Web Transfer to Drive State
+    var webDownloadUrl by remember { mutableStateOf("") }
+    var autoExtractAfterTransfer by remember { mutableStateOf(true) }
 
     // 🚀 Execution State
     var isExtracting by remember { mutableStateOf(false) }
@@ -556,7 +562,7 @@ fun UnzipScreen() {
                                     color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        text = "v1.4.2",
+                                        text = "v1.5.0",
                                         fontFamily = CambriaFont,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
@@ -853,8 +859,44 @@ fun UnzipScreen() {
                 }
             }
 
-            // 📁 Source & Target Folder Selection Card (Cleaned up!)
+            // 🔀 Mode Selector: Extract Archive vs Web Transfer to Drive
             item {
+                TabRow(
+                    selectedTabIndex = selectedOperationTab,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                ) {
+                    Tab(
+                        selected = selectedOperationTab == 0,
+                        onClick = { selectedOperationTab = 0 },
+                        text = {
+                            Text(
+                                "📦 Extract Archive",
+                                fontFamily = CambriaFont,
+                                fontWeight = if (selectedOperationTab == 0) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.sp
+                            )
+                        }
+                    )
+                    Tab(
+                        selected = selectedOperationTab == 1,
+                        onClick = { selectedOperationTab = 1 },
+                        text = {
+                            Text(
+                                "📥 Transfer to Drive",
+                                fontFamily = CambriaFont,
+                                fontWeight = if (selectedOperationTab == 1) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.sp
+                            )
+                        }
+                    )
+                }
+            }
+
+            if (selectedOperationTab == 0) {
+                // 📁 Source & Target Folder Selection Card (Cleaned up!)
+                item {
                 OutlinedCard(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -1015,6 +1057,238 @@ fun UnzipScreen() {
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+            } else {
+                // 📥 Web / Direct Link Transfer Card
+                item {
+                    OutlinedCard(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = "Transfer Web Link directly to Drive",
+                                    fontFamily = CambriaFont,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "High-speed cloud download directly into your Google Drive folder",
+                                    fontFamily = CambriaFont,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                )
+                            }
+
+                            // --- Download Link Field ---
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "Web / GDFlix / Direct Download Link:",
+                                    fontFamily = CambriaFont,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                OutlinedTextField(
+                                    value = webDownloadUrl,
+                                    onValueChange = { webDownloadUrl = it.trim() },
+                                    placeholder = {
+                                        Text("Paste GDFlix, GoFile, or direct URL...", fontFamily = CambriaFont, fontSize = 12.sp)
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                                    trailingIcon = {
+                                        if (webDownloadUrl.isNotBlank()) {
+                                            IconButton(onClick = { webDownloadUrl = "" }) {
+                                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            val clip = clipboardManager.getText()?.text?.trim() ?: ""
+                                            if (clip.isNotBlank()) {
+                                                webDownloadUrl = clip
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Paste Link", fontFamily = CambriaFont, fontSize = 11.sp)
+                                    }
+                                }
+                            }
+
+                            // --- Save to Drive Folder ---
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "Save to Drive Folder:",
+                                    fontFamily = CambriaFont,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                OutlinedTextField(
+                                    value = sourceFolder,
+                                    onValueChange = {
+                                        sourceFolder = it
+                                        persistSettings()
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                            }
+
+                            // --- Auto-Extract Option ---
+                            Card(
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+                                ),
+                                modifier = Modifier.clickable { autoExtractAfterTransfer = !autoExtractAfterTransfer }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "⚡ Auto-Extract after download",
+                                            fontFamily = CambriaFont,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            text = "Unzips straight into '$destinationFolder'",
+                                            fontFamily = CambriaFont,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                    Switch(
+                                        checked = autoExtractAfterTransfer,
+                                        onCheckedChange = { autoExtractAfterTransfer = it }
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // 🚀 START CLOUD TRANSFER BUTTON
+                            Button(
+                                onClick = {
+                                    if (serverUrl.isBlank()) {
+                                        hasError = true
+                                        hasSuccess = false
+                                        progressPercent = 0
+                                        currentStatus = "Error: Cloud Server URL is empty!"
+                                        logMessages.add("❌ Error: Cloud Server URL is empty!")
+                                        return@Button
+                                    }
+                                    if (webDownloadUrl.isBlank()) {
+                                        hasError = true
+                                        hasSuccess = false
+                                        progressPercent = 0
+                                        currentStatus = "Error: Please paste a download link!"
+                                        logMessages.add("❌ Error: Download URL is empty!")
+                                        return@Button
+                                    }
+
+                                    if (!isExtracting) {
+                                        isExtracting = true
+                                        hasError = false
+                                        hasSuccess = false
+                                        progressPercent = 0
+                                        currentStatus = "Connecting to Cloud Transfer Engine..."
+                                        logMessages.clear()
+                                        logMessages.add("🚀 Dispatching Cloud Transfer for: $webDownloadUrl")
+
+                                        coroutineScope.launch {
+                                            executeRealTransfer(
+                                                serverUrl = serverUrl,
+                                                downloadUrl = webDownloadUrl,
+                                                saveFolder = sourceFolder,
+                                                autoExtract = autoExtractAfterTransfer,
+                                                extractDest = destinationFolder,
+                                                onProgress = { pct, msg ->
+                                                    if (pct in 0..100 && pct >= progressPercent) {
+                                                        progressPercent = pct
+                                                    }
+                                                    currentStatus = msg
+                                                    if (pct > 0) {
+                                                        hasError = false
+                                                    }
+                                                    logMessages.add(msg)
+                                                },
+                                                onComplete = { isSuccess, finalMsg ->
+                                                    isExtracting = false
+                                                    if (isSuccess) {
+                                                        progressPercent = 100
+                                                        hasSuccess = true
+                                                        hasError = false
+                                                        currentStatus = finalMsg
+                                                    } else {
+                                                        hasSuccess = false
+                                                        hasError = true
+                                                        currentStatus = finalMsg
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(54.dp),
+                                enabled = !isExtracting,
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1976D2)
+                                )
+                            ) {
+                                if (isExtracting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = "Transferring in Cloud...",
+                                        fontFamily = CambriaFont,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    )
+                                } else {
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "START CLOUD TRANSFER",
+                                        fontFamily = CambriaFont,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -1241,3 +1515,102 @@ suspend fun executeRealExtraction(
         }
     }
 }
+
+/**
+ * Streams real-time progress for downloading any web link (GDFlix, GoFile, direct URL)
+ * directly into Google Drive with optional automatic extraction!
+ */
+suspend fun executeRealTransfer(
+    serverUrl: String,
+    downloadUrl: String,
+    saveFolder: String,
+    autoExtract: Boolean,
+    extractDest: String,
+    onProgress: (Int, String) -> Unit,
+    onComplete: (Boolean, String) -> Unit
+) = withContext(Dispatchers.IO) {
+    val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(1800, TimeUnit.SECONDS)
+        .build()
+
+    val json = JSONObject().apply {
+        put("url", downloadUrl)
+        put("destination_folder", saveFolder)
+        put("auto_extract", autoExtract)
+        put("extract_destination", extractDest)
+    }
+
+    val requestBody = json.toString().toRequestBody("application/json".toMediaType())
+    val endpoint = "${serverUrl.trimEnd('/')}/api/transfer-stream"
+
+    var transferSucceeded = false
+    var lastMessage = "Transfer stopped."
+
+    try {
+        val request = Request.Builder()
+            .url(endpoint)
+            .post(requestBody)
+            .build()
+
+        val response = client.newCall(request).execute()
+        if (!response.isSuccessful) {
+            val err = "Server returned HTTP ${response.code}: Check backend."
+            withContext(Dispatchers.Main) {
+                onProgress(0, "❌ $err")
+                onComplete(false, err)
+            }
+            return@withContext
+        }
+
+        val reader = BufferedReader(InputStreamReader(response.body?.byteStream()))
+        var line: String?
+
+        while (reader.readLine().also { line = it } != null) {
+            val text = line ?: continue
+            if (text.startsWith("data: ")) {
+                val dataJson = text.removePrefix("data: ").trim()
+                try {
+                    val obj = JSONObject(dataJson)
+                    val status = obj.optString("status", "")
+                    val msg = obj.optString("message", "")
+
+                    val pctFromJson = if (obj.has("progress")) obj.getInt("progress") else -1
+                    val pctFromMsg = if (pctFromJson < 0) {
+                        val match = Regex("""(\d+)%""").find(msg)
+                        match?.groupValues?.get(1)?.toIntOrNull() ?: -1
+                    } else -1
+
+                    val resolvedPct = when {
+                        pctFromJson >= 0 -> pctFromJson
+                        pctFromMsg >= 0 -> pctFromMsg
+                        else -> -1
+                    }
+
+                    lastMessage = msg
+                    if (status == "success") {
+                        transferSucceeded = true
+                    } else if (status == "error") {
+                        transferSucceeded = false
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        onProgress(resolvedPct, msg)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            onComplete(transferSucceeded, lastMessage)
+        }
+    } catch (e: Exception) {
+        val err = "Connection Error: ${e.localizedMessage ?: "Failed to connect to Cloud Server"}"
+        withContext(Dispatchers.Main) {
+            onProgress(0, "❌ $err")
+            onProgress(0, "💡 Check if your Colab Cloud Worker cell is currently running!")
+            onComplete(false, err)
+        }
+    }
+}
+
